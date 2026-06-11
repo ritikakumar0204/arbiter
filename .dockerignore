@@ -1,0 +1,10 @@
+# Never bake secrets or local cruft into the image.
+.env
+*.pem
+.venv/
+__pycache__/
+*.py[cod]
+.git/
+.gitignore
+gen_secret.py
+README.md

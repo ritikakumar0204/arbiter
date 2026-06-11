@@ -1,0 +1,24 @@
+# Render Blueprint. Push this repo to GitHub, then in Render:
+#   New + -> Blueprint -> pick this repo. Render reads this file and creates
+#   the service. Fill the secret values (sync:false) in the dashboard.
+services:
+  - type: web
+    name: arbiter-pr-review
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # Secrets — set these in the Render dashboard, NOT in this file.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GITHUB_APP_ID
+        sync: false
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
+      # Paste the FULL .pem contents (multiline is fine). Do NOT set
+      # GITHUB_PRIVATE_KEY_PATH on the host — there's no file there.
+      - key: GITHUB_PRIVATE_KEY
+        sync: false
+      # Non-secret config can live here.
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash

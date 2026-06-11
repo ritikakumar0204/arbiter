@@ -1,0 +1,11 @@
+# --- Web server / webhook ---
+fastapi
+uvicorn[standard]
+python-dotenv
+
+# --- GitHub App ---
+PyGithub>=2.3.0
+
+# --- Agent brain (used by graph/, stubbed for now) ---
+langgraph
+langchain-google-genai
