@@ -24,9 +24,11 @@ import hashlib
 import hmac
 import logging
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
+from fastapi.responses import FileResponse
 
 import github_utils
 from graph.review_graph import PRContext, run_review
@@ -37,6 +39,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("arbiter")
 
 app = FastAPI(title="Arbiter PR Review Agent")
+
+# Landing page (served at /). Absolute path so it resolves regardless of cwd.
+INDEX_HTML = Path(__file__).parent / "static" / "index.html"
 
 # PR actions worth reviewing. "opened"/"reopened" = new PR; "synchronize" = new push.
 REVIEWABLE_ACTIONS = {"opened", "reopened", "synchronize", "ready_for_review"}
@@ -74,6 +79,12 @@ def process_pull_request(installation_id: int, repo: str, number: int) -> None:
         log.info("Posted review on %s#%s", repo, number)
     except Exception:  # noqa: BLE001 — log and swallow; webhook already ACKed
         log.exception("Failed to process %s#%s", repo, number)
+
+
+@app.get("/")
+def home() -> FileResponse:
+    """Portfolio landing page describing Arbiter and linking to the GitHub App."""
+    return FileResponse(INDEX_HTML)
 
 
 @app.get("/health")
