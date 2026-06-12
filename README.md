@@ -1,6 +1,7 @@
 # 🤖 Arbiter — Multi-Agent AI Code Reviewer
 
 > A GitHub App that automatically reviews every pull request with a team of specialized AI agents and posts a single, synthesized verdict back as a comment.
+<img alt="Python" src=logo.png>
 
 <p>
   <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white">
