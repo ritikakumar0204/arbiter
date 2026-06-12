@@ -21,4 +21,4 @@ services:
         sync: false
       # Non-secret config can live here.
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-2.5-flash-lite
