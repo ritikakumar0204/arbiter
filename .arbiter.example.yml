@@ -1,0 +1,10 @@
+# Optional per-repo config for Arbiter. To use it, copy this file to
+# `.arbiter.yml` at the root of YOUR repo (the one the App is installed on).
+# If absent, Arbiter reviews with its default behavior.
+
+# Free-form guidance fed to every review agent. Write it like you'd brief a
+# new reviewer: stack, conventions, what to focus on, what to ignore.
+instructions: |
+  This project uses FastAPI and pytest. Be strict about missing tests for new
+  endpoints and about error handling. Do not comment on formatting — ruff
+  handles that. Prefer concrete, actionable suggestions over general advice.

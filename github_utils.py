@@ -13,8 +13,12 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 
-from github import Auth, GithubIntegration
+import yaml
+from github import Auth, GithubException, GithubIntegration
 from github.PullRequest import PullRequest
+
+# Optional per-repo config; first match wins. Absent file = default behavior.
+CONFIG_FILENAMES = (".arbiter.yml", ".arbiter.yaml", ".github/arbiter.yml")
 
 
 def _load_private_key() -> str:
@@ -86,6 +90,29 @@ def build_diff_text(files: list[dict], max_chars: int = 60_000) -> str:
     if len(text) > max_chars:
         text = text[:max_chars] + "\n\n…[diff truncated]…"
     return text
+
+
+def fetch_review_instructions(pr: PullRequest) -> str:
+    """Read maintainer review instructions from .arbiter.yml on the PR base branch.
+
+    Returns the `instructions:` text, or "" if no config file exists or it can't
+    be parsed — so a repo with no config reviews exactly as it did before.
+    """
+    repo = pr.base.repo
+    ref = pr.base.sha
+    for name in CONFIG_FILENAMES:
+        try:
+            content = repo.get_contents(name, ref=ref)
+        except GithubException:
+            continue  # not found at this path; try the next
+        try:
+            data = yaml.safe_load(content.decoded_content.decode("utf-8")) or {}
+        except yaml.YAMLError:
+            return ""  # malformed config — fall back to defaults
+        if isinstance(data, dict):
+            return str(data.get("instructions", "") or "")
+        return ""
+    return ""
 
 
 def post_review_comment(pr: PullRequest, body: str) -> None:

@@ -67,6 +67,7 @@ def process_pull_request(installation_id: int, repo: str, number: int) -> None:
             "body": pr.body or "",
             "files": files,
             "diff": github_utils.build_diff_text(files),
+            "instructions": github_utils.fetch_review_instructions(pr),
         }
         review = run_review(context)
         github_utils.post_review_comment(pr, review)

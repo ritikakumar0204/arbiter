@@ -25,3 +25,19 @@ def get_llm() -> ChatGoogleGenerativeAI:
         google_api_key=os.getenv("GEMINI_API_KEY"),
         temperature=0.2,
     )
+
+
+def context_block(instructions: str) -> str:
+    """Render maintainer-provided review instructions as a prompt preamble.
+
+    Sourced from the repo's optional .arbiter.yml. Returns "" when there are no
+    instructions, so prompts are unchanged in the default (no-config) case.
+    """
+    instructions = (instructions or "").strip()
+    if not instructions:
+        return ""
+    return (
+        "The repository maintainers provided these review instructions. "
+        "Follow them where they apply:\n"
+        f'"""\n{instructions}\n"""\n'
+    )

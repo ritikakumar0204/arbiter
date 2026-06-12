@@ -1,111 +1,131 @@
-# Arbiter — AI PR Review Agent
+# 🤖 Arbiter — Multi-Agent AI Code Reviewer
 
-A GitHub App that listens for pull-request events, runs review agents on the
-diff, and posts a verdict back as a comment.
+> A GitHub App that automatically reviews every pull request with a team of specialized AI agents and posts a single, synthesized verdict back as a comment.
 
-The full pipeline is wired: the FastAPI webhook server, signature verification,
-GitHub App auth, diff fetching, the **LangGraph agent brain** (three reviewers +
-supervisor), and comment posting.
+<p>
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white">
+  <img alt="LangGraph" src="https://img.shields.io/badge/LangGraph-multi--agent-1C3C3C">
+  <img alt="Gemini" src="https://img.shields.io/badge/Gemini-2.5%20Flash-4285F4?logo=googlegemini&logoColor=white">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-deployable-2496ED?logo=docker&logoColor=white">
+</p>
 
-## Layout
+---
 
-| File | Role |
-|------|------|
-| [main.py](main.py) | FastAPI server, `/webhook` endpoint, HMAC check, background dispatch |
-| [github_utils.py](github_utils.py) | App auth, fetch PR files/diff, post comment |
-| [graph/review_graph.py](graph/review_graph.py) | LangGraph: fan out to agents → supervisor → `run_review(pr_context) -> markdown` |
-| [agents/](agents/) | `code_quality`, `test_coverage`, `docs` reviewers + `supervisor`; shared Gemini client in `llm.py` |
-| [.env.example](.env.example) | Config template — copy to `.env` |
+## What it does
 
-## The agent graph
+Open or update a pull request, and Arbiter reviews it within seconds — no human in the loop. Instead of one generalist model, it runs **three specialist reviewers in parallel** (code quality, test coverage, documentation) and a **supervisor** that merges their notes into one clear verdict: **Approve**, **Request Changes**, or **Needs Discussion**.
+
+> _Add a screenshot of a posted review comment here — it's the strongest single thing you can show._
+>
+> `![Example review](docs/example-review.png)`
+
+## Architecture
 
 ```
-        ┌─ code_quality ─┐
-START ──┼─ test_coverage ─┼──▶ supervisor ──▶ comment
-        └─ docs ─────────┘
+                                          ┌─ code_quality ─┐
+  GitHub PR ──webhook──▶  FastAPI  ──────▶ ┼─ test_coverage ─┼──▶ supervisor ──▶ PR comment
+  (signed)              (verify + queue)   └─ docs ─────────┘     (synthesize)
+                              │                    LangGraph
+                              └─ 202 ACK (fast)    (parallel fan-out / fan-in)
 ```
 
-The three reviewers run in parallel over the PR diff; the supervisor waits for
-all three, then writes a verdict (**Approve** / **Request Changes** /
-**Needs Discussion**) with grouped key points. Model defaults to
-`gemini-2.0-flash` — override with `GEMINI_MODEL` in `.env`.
+1. GitHub sends a signed `pull_request` webhook.
+2. The server **verifies the HMAC signature**, then queues the work and returns immediately — GitHub gets its ACK well inside the ~10s webhook timeout.
+3. In the background, the app authenticates as a **GitHub App installation**, fetches the PR diff, and runs the **LangGraph**: the three reviewers execute concurrently, the supervisor waits for all of them, then writes the verdict.
+4. The verdict is posted back as a PR comment.
 
-## Setup
+## Engineering highlights
+
+- **Multi-agent orchestration with LangGraph** — true parallel fan-out/fan-in, not sequential model calls. Each agent owns its own slice of state, so there are no write conflicts.
+- **Secure webhooks** — every payload is validated with an HMAC-SHA256 signature check (`hmac.compare_digest`) before any work happens; forged requests are rejected with a 401.
+- **Non-blocking by design** — reviews run in a background task so the webhook ACKs fast and never trips GitHub's delivery timeout.
+- **Proper GitHub App auth** — short-lived JWT → per-installation access token (PyGithub 2.x), scoped to exactly the repos the App is installed on.
+- **Swappable model & clean seams** — the entire agent brain sits behind one function, `run_review(pr_context) -> markdown`; the model is a single env var (`GEMINI_MODEL`).
+- **Deploy-ready** — containerized, with a one-file Render blueprint; the same Dockerfile runs on Fly.io, Railway, or Cloud Run.
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Agent orchestration | **LangGraph** |
+| LLM | **Google Gemini** (`gemini-2.5-flash-lite`) via `langchain-google-genai` |
+| Web server | **FastAPI** + Uvicorn |
+| GitHub integration | **GitHub App** + PyGithub |
+| Deploy | **Docker** + Render |
+
+## Project structure
+
+```
+arbiter/
+├── main.py              FastAPI server: /webhook, signature check, background dispatch
+├── github_utils.py      GitHub App auth, PR diff fetch, comment posting
+├── graph/
+│   └── review_graph.py  LangGraph wiring + run_review() entry point
+├── agents/
+│   ├── llm.py           shared Gemini client
+│   ├── code_quality.py  ┐
+│   ├── test_coverage.py ├─ specialist reviewers
+│   ├── docs_agent.py    ┘
+│   └── supervisor.py    synthesizes the final verdict
+├── Dockerfile
+└── render.yaml          one-click deploy blueprint
+```
+
+## Run it locally
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate          # PowerShell: .venv\Scripts\Activate.ps1
+.venv\Scripts\Activate.ps1          # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-copy .env.example .env          # then fill it in
-```
+copy .env.example .env              # then fill it in (see below)
 
-### Create the GitHub App
-1. GitHub → Settings → Developer settings → **GitHub Apps** → New.
-2. **Webhook URL**: your public tunnel URL + `/webhook` (see below).
-   **Webhook secret**: a long random string → put it in `GITHUB_WEBHOOK_SECRET`.
-3. **Permissions**: Pull requests = *Read & write*, Contents = *Read-only*.
-4. **Subscribe to events**: *Pull request*.
-5. Generate a **private key** (.pem), download it, and either point
-   `GITHUB_PRIVATE_KEY_PATH` at it or paste it into `GITHUB_PRIVATE_KEY`.
-6. Copy the **App ID** into `GITHUB_APP_ID`, then **Install** the App on a repo.
-
-## Run locally
-
-```bash
 uvicorn main:app --reload --port 8000
 ```
 
-Expose it so GitHub can reach it (webhooks need a public URL):
+Because GitHub can't reach `localhost`, expose the server with a tunnel and point the App's webhook at it:
 
 ```bash
 ngrok http 8000
-# or: cloudflared tunnel --url http://localhost:8000
+# webhook URL → https://<tunnel-host>/webhook
 ```
 
-Set the App's webhook URL to `https://<tunnel-host>/webhook`. Open or push to a
-PR on the installed repo — Arbiter posts a comment within a few seconds.
+Health check: `GET /health` → `{"status":"ok"}`.
 
-- Health check: `GET /health` → `{"status":"ok"}`
-- GitHub's initial "ping" event returns `{"msg":"pong"}`.
+### Configuration (`.env`)
 
-## How it works
+| Variable | Description |
+|---|---|
+| `GEMINI_API_KEY` | Google AI Studio key |
+| `GEMINI_MODEL` | Model id (default `gemini-2.5-flash-lite`) |
+| `GITHUB_APP_ID` | From the App's settings page |
+| `GITHUB_WEBHOOK_SECRET` | Must match the secret set on the App |
+| `GITHUB_PRIVATE_KEY_PATH` | Path to the App's `.pem` (local), **or** |
+| `GITHUB_PRIVATE_KEY` | The PEM contents inline (used in deploys) |
 
-1. GitHub POSTs a signed `pull_request` webhook to `/webhook`.
-2. The server verifies the `X-Hub-Signature-256` HMAC against the secret.
-3. Relevant actions (`opened`, `reopened`, `synchronize`, `ready_for_review`)
-   are queued to a background task; GitHub gets an immediate ACK.
-4. The worker mints an installation token, fetches the PR's changed files and
-   diff, calls `run_review`, and posts the result as a PR comment.
+### Create the GitHub App
 
-## Phase 5 — Deploy (Render)
+GitHub → Settings → Developer settings → **GitHub Apps → New**:
 
-Hosting gives you a permanent HTTPS URL, so you can stop running ngrok + uvicorn
-locally. Files: [Dockerfile](Dockerfile), [.dockerignore](.dockerignore),
-[render.yaml](render.yaml).
+- **Webhook URL**: your public URL + `/webhook` · **Webhook secret**: a long random string
+- **Permissions**: Pull requests *Read & write*, Contents *Read-only*
+- **Subscribe to events**: *Pull request*
+- Generate a **private key** (`.pem`), copy the **App ID**, then **install** the App on a repo.
 
-**Key difference from local:** there is no `.pem` file on the host. Instead of
-`GITHUB_PRIVATE_KEY_PATH`, set the **`GITHUB_PRIVATE_KEY`** env var to the full
-PEM contents. `github_utils._load_private_key()` falls back to it automatically.
+## Deploy (Render)
 
-1. **Push to GitHub** (Render deploys from a repo):
-   ```bash
-   git add -A && git commit -m "Arbiter PR review agent"
-   gh repo create arbiter --private --source=. --push
-   ```
-2. **Create the service**: [render.com](https://render.com) → **New + → Blueprint**
-   → pick the `arbiter` repo. Render reads `render.yaml`.
-3. **Set the secret env vars** in the Render dashboard (they're `sync:false`):
-   - `GEMINI_API_KEY`
-   - `GITHUB_APP_ID`
-   - `GITHUB_WEBHOOK_SECRET` (same value as in your App)
-   - `GITHUB_PRIVATE_KEY` → open your `.pem` in a text editor, copy **everything**
-     including the `-----BEGIN/END-----` lines, paste into the field.
-4. **Deploy.** When live, Render gives you `https://arbiter-pr-review.onrender.com`.
-   Confirm `https://<that-host>/health` returns `{"status":"ok"}`.
-5. **Repoint the App webhook**: GitHub App → Edit → **Webhook URL** →
-   `https://<that-host>/webhook` → Save. Redeliver a `ping` to confirm 200.
+The repo ships a [Dockerfile](Dockerfile) and a [render.yaml](render.yaml) blueprint.
 
-⚠️ Render's **free** tier sleeps after ~15 min idle; the first webhook after a
-sleep can take ~50s to wake, which may exceed GitHub's delivery timeout. GitHub
-retries, so the review still posts, but for snappier behavior use a paid instance
-or a host that stays warm (Fly.io, Railway). The Dockerfile works on all of them.
+1. Push the repo to GitHub.
+2. [render.com](https://render.com) → **New + → Blueprint** → select the repo (Render reads `render.yaml`).
+3. Set the secret env vars in the dashboard: `GEMINI_API_KEY`, `GITHUB_APP_ID`, `GITHUB_WEBHOOK_SECRET`, and `GITHUB_PRIVATE_KEY` (paste the full `.pem` — there's no key file on the host).
+4. Point the App's webhook at `https://<your-service>.onrender.com/webhook`.
+
+> **Note:** Render's free tier sleeps after ~15 min idle, so the first request after a nap takes a few seconds to wake. GitHub retries, so reviews still post. For always-warm hosting, the same Docker image runs on Fly.io, Railway, or Google Cloud Run.
+
+## Possible extensions
+
+- Inline review comments on specific diff lines (not just a summary)
+- Per-repo config (`.arbiter.yml`) to tune which agents run
+- Caching to skip re-review of unchanged files on `synchronize`
+- A web dashboard of past reviews

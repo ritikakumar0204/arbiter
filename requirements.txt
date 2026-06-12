@@ -5,6 +5,7 @@ python-dotenv
 
 # --- GitHub App ---
 PyGithub>=2.3.0
+PyYAML
 
 # --- Agent brain (used by graph/, stubbed for now) ---
 langgraph

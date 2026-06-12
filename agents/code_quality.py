@@ -4,15 +4,14 @@ from __future__ import annotations
 
 from langchain_core.messages import HumanMessage
 
-from agents.llm import get_llm
+from agents.llm import context_block, get_llm
 
 
-def run_code_quality_agent(diff: str) -> str:
+def run_code_quality_agent(diff: str, instructions: str = "") -> str:
     prompt = f"""You are a senior engineer reviewing a pull request diff.
 Analyze the code quality: look for bugs, bad patterns, naming issues, and complexity.
-Be concise and specific. Reference file names where relevant. Return bullet points only.
-If the diff looks clean, say so in one bullet.
-
+Be concise and specific. Return 3-5 bullet points. Be specific, reference file names. If clean, say '✓ No major issues found.'
+{context_block(instructions)}
 PR Diff:
 {diff}
 """
