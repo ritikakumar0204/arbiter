@@ -17,9 +17,6 @@
 
 Open or update a pull request, and Arbiter reviews it within seconds — no human in the loop. Instead of one generalist model, it runs **three specialist reviewers in parallel** (code quality, test coverage, documentation) and a **supervisor** that merges their notes into one clear verdict: **Approve**, **Request Changes**, or **Needs Discussion**.
 
-> _Add a screenshot of a posted review comment here — it's the strongest single thing you can show._
->
-> `![Example review](docs/example-review.png)`
 
 ## Architecture
 
