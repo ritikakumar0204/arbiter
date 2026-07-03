@@ -103,6 +103,22 @@ def _compiled_graph():
     return builder.compile()
 
 
+def review_diff(diff: str, instructions: str = "", repo_context: str = "") -> str:
+    """Run the review graph over a raw diff and return the supervisor's verdict.
+
+    Transport-agnostic core shared by every surface: the GitHub App (run_review,
+    which wraps this in a PR-comment envelope) and the MCP server (mcp_server.py,
+    which returns it verbatim). Needs only the LLM — no GitHub, no database.
+    """
+    diff = diff.strip()
+    if not diff:
+        return "No reviewable diff provided (empty or binary-only change set)."
+    result = _compiled_graph().invoke(
+        {"diff": diff, "instructions": instructions or "", "repo_context": repo_context or ""}
+    )
+    return result["review"]
+
+
 def run_review(pr_context: PRContext) -> str:
     """Run the review graph over a PR and return the Markdown comment body."""
     diff = pr_context["diff"].strip()
@@ -114,10 +130,7 @@ def run_review(pr_context: PRContext) -> str:
 
     instructions = pr_context.get("instructions", "")
     repo_context = pr_context.get("repo_context", "")
-    result = _compiled_graph().invoke(
-        {"diff": diff, "instructions": instructions, "repo_context": repo_context}
-    )
-    verdict = result["review"]
+    verdict = review_diff(diff, instructions, repo_context)
 
     custom = " · applied repo `.arbiter.yml`" if instructions.strip() else ""
     rag = " · 🔍 repo-aware" if repo_context.strip() else ""

@@ -43,6 +43,7 @@ Reviews are **repo-aware**: Arbiter indexes the repository into a **pgvector** s
 ## Engineering highlights
 
 - **Repo-aware RAG on pgvector** — the repo is chunked, embedded (Gemini `text-embedding-004`), and stored in Postgres/pgvector; each diff drives a cosine-similarity retrieval so reviewers see the surrounding codebase. Indexing is **incremental**, keyed on git blob SHAs, so only changed files re-embed. Entirely optional — no `DATABASE_URL`, no behavior change.
+- **MCP server** — the same agent brain is exposed as [Model Context Protocol](https://modelcontextprotocol.io) tools ([mcp_server.py](mcp_server.py)), so Claude Desktop / Cursor / any MCP client can review a local diff. This surface needs **only** a Gemini key and model — no webhook, no GitHub App, no database. One core (`review_diff`) is shared by both surfaces.
 - **Multi-agent orchestration with LangGraph** — true parallel fan-out/fan-in, not sequential model calls. Each agent owns its own slice of state, so there are no write conflicts.
 - **Secure webhooks** — every payload is validated with an HMAC-SHA256 signature check (`hmac.compare_digest`) before any work happens; forged requests are rejected with a 401.
 - **Non-blocking by design** — reviews run in a background task so the webhook ACKs fast and never trips GitHub's delivery timeout.
@@ -57,6 +58,7 @@ Reviews are **repo-aware**: Arbiter indexes the repository into a **pgvector** s
 | Agent orchestration | **LangGraph** |
 | LLM | **Google Gemini** (`gemini-2.5-flash-lite`) via `langchain-google-genai` |
 | RAG / retrieval | **pgvector** on Postgres · Gemini `text-embedding-004` · `psycopg` 3 |
+| Agent interop | **MCP** server (`mcp`) — reviewers as tools for any MCP client |
 | Web server | **FastAPI** + Uvicorn |
 | GitHub integration | **GitHub App** + PyGithub |
 | Deploy | **Docker** + Render |
@@ -83,6 +85,8 @@ arbiter/
 │   ├── store.py         upsert + cosine-similarity search
 │   ├── indexer.py       repo tree → chunks → store (incremental)
 │   └── retrieval.py     diff → retrieved context block (public façade)
+├── mcp_server.py        MCP server — same reviewers as tools for any MCP client
+├── mcp.example.json     example Claude Desktop / Cursor client config
 ├── docker-compose.yml   local pgvector
 ├── Dockerfile
 └── render.yaml          one-click deploy blueprint (web + Postgres)
@@ -155,6 +159,26 @@ When `DATABASE_URL` is set, Arbiter maintains a pgvector index per repository:
 - **Degrade gracefully** — no database, an unreachable database, or a retrieval error all fall back to diff-only review. RAG is a strict enhancement, never a hard dependency.
 
 Reviews that used retrieval are tagged `🔍 repo-aware` in the posted comment header.
+
+## Use it from any MCP client
+
+Beyond the GitHub App, Arbiter ships an **MCP server** that turns the reviewers into tools any MCP client can call on a local diff. It needs **only** `GEMINI_API_KEY` and (optionally) `GEMINI_MODEL` — no GitHub App, no webhook, no database.
+
+```bash
+pip install -r requirements.txt
+GEMINI_API_KEY=... python mcp_server.py     # stdio transport
+```
+
+Register it with Claude Desktop by merging [mcp.example.json](mcp.example.json) into `claude_desktop_config.json` (set `cwd` to this repo and fill in your key). Tools exposed:
+
+| Tool | What it does |
+|---|---|
+| `review_pull_request` | Full multi-agent review → **Approve** / **Request Changes** / **Needs Discussion** |
+| `review_code_quality` | Bugs, bad patterns, naming, complexity |
+| `review_test_coverage` | Missing tests, uncovered edge cases, weak assertions |
+| `review_documentation` | Missing docstrings, unclear naming, stale comments |
+
+Each tool takes a `diff` (e.g. `git diff main`) and optional `instructions`.
 
 ## Possible extensions
 
