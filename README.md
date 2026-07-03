@@ -44,6 +44,7 @@ Reviews are **repo-aware**: Arbiter indexes the repository into a **pgvector** s
 
 - **Repo-aware RAG on pgvector** — the repo is chunked, embedded (Gemini `text-embedding-004`), and stored in Postgres/pgvector; each diff drives a cosine-similarity retrieval so reviewers see the surrounding codebase. Indexing is **incremental**, keyed on git blob SHAs, so only changed files re-embed. Entirely optional — no `DATABASE_URL`, no behavior change.
 - **MCP server** — the same agent brain is exposed as [Model Context Protocol](https://modelcontextprotocol.io) tools ([mcp_server.py](mcp_server.py)), so Claude Desktop / Cursor / any MCP client can review a local diff. This surface needs **only** a Gemini key and model — no webhook, no GitHub App, no database. One core (`review_diff`) is shared by both surfaces.
+- **Linear sync** — when a PR maps to a Linear issue (resolved from the git branch, with an identifier-regex fallback), Arbiter posts the verdict as a comment on that issue and tags it with an `arbiter:<verdict>` label — closing the loop back to where the work is tracked. GraphQL over HTTP, optional and best-effort: no `LINEAR_API_KEY`, no behavior change.
 - **Multi-agent orchestration with LangGraph** — true parallel fan-out/fan-in, not sequential model calls. Each agent owns its own slice of state, so there are no write conflicts.
 - **Secure webhooks** — every payload is validated with an HMAC-SHA256 signature check (`hmac.compare_digest`) before any work happens; forged requests are rejected with a 401.
 - **Non-blocking by design** — reviews run in a background task so the webhook ACKs fast and never trips GitHub's delivery timeout.
@@ -59,6 +60,7 @@ Reviews are **repo-aware**: Arbiter indexes the repository into a **pgvector** s
 | LLM | **Google Gemini** (`gemini-2.5-flash-lite`) via `langchain-google-genai` |
 | RAG / retrieval | **pgvector** on Postgres · Gemini `text-embedding-004` · `psycopg` 3 |
 | Agent interop | **MCP** server (`mcp`) — reviewers as tools for any MCP client |
+| SaaS integration | **Linear** GraphQL API (`httpx`) — verdict → issue comment + label |
 | Web server | **FastAPI** + Uvicorn |
 | GitHub integration | **GitHub App** + PyGithub |
 | Deploy | **Docker** + Render |
@@ -87,6 +89,8 @@ arbiter/
 │   └── retrieval.py     diff → retrieved context block (public façade)
 ├── mcp_server.py        MCP server — same reviewers as tools for any MCP client
 ├── mcp.example.json     example Claude Desktop / Cursor client config
+├── integrations/
+│   └── linear.py        mirror the verdict onto the PR's linked Linear issue
 ├── docker-compose.yml   local pgvector
 ├── Dockerfile
 └── render.yaml          one-click deploy blueprint (web + Postgres)
@@ -179,6 +183,17 @@ Register it with Claude Desktop by merging [mcp.example.json](mcp.example.json) 
 | `review_documentation` | Missing docstrings, unclear naming, stale comments |
 
 Each tool takes a `diff` (e.g. `git diff main`) and optional `instructions`.
+
+## Linear sync
+
+When `LINEAR_API_KEY` is set, a reviewed PR that maps to a Linear issue gets the verdict mirrored onto that issue — so it appears where the work is tracked, not just in GitHub.
+
+- **Resolve** — the PR's head branch is matched to its issue via Linear's `issueVcsBranchSearch` (works out of the box once the repo is connected to the workspace). Fallback: an identifier like `ARB-1` is scraped from the branch / title / body.
+- **Comment** — the supervisor's verdict is posted as a comment on the issue, linking back to the PR.
+- **Label** — the issue is tagged `arbiter:approved` / `arbiter:changes-requested` / `arbiter:needs-discussion` (created on first use), so reviews are filterable in Linear. Disable with `LINEAR_APPLY_LABELS=false`.
+- **Degrade gracefully** — no key, no linked issue, or an API error all skip silently; the GitHub review is unaffected.
+
+**Setup:** create a Personal API key at **Linear → Settings → Security & access → Personal API keys**, set `LINEAR_API_KEY`, and make sure the repo is connected to your Linear workspace. To demo: create an issue (e.g. `ARB-1`), branch with that identifier (`arb-1-...`, or use Linear's *Copy git branch name*), open a PR, and watch the verdict land on the issue.
 
 ## Possible extensions
 

@@ -32,7 +32,7 @@ from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 
 import github_utils
-from graph.review_graph import PRContext, run_review
+from graph.review_graph import PRContext, format_comment, review_diff
 
 load_dotenv()
 
@@ -100,6 +100,17 @@ def _repo_context(pr, repo: str, files: list[dict], diff: str) -> str:
         return ""
 
 
+def _sync_linear(pr, repo: str, verdict: str) -> None:
+    """Mirror the verdict onto the PR's linked Linear issue, if configured."""
+    try:
+        from integrations import linear
+        if not linear.is_enabled():
+            return
+        linear.sync_review(pr, repo, verdict)
+    except Exception:  # noqa: BLE001 — best-effort; GitHub review already posted
+        log.exception("Linear sync failed for %s#%s", repo, pr.number)
+
+
 def process_pull_request(installation_id: int, repo: str, number: int) -> None:
     """Background worker: review one PR and post the result."""
     try:
@@ -116,9 +127,11 @@ def process_pull_request(installation_id: int, repo: str, number: int) -> None:
             "instructions": github_utils.fetch_review_instructions(pr),
             "repo_context": _repo_context(pr, repo, files, diff),
         }
-        review = run_review(context)
-        github_utils.post_review_comment(pr, review)
+        verdict = review_diff(diff, context["instructions"], context["repo_context"])
+        github_utils.post_review_comment(pr, format_comment(context, verdict))
         log.info("Posted review on %s#%s", repo, number)
+        if diff.strip():
+            _sync_linear(pr, repo, verdict)
     except Exception:  # noqa: BLE001 — log and swallow; webhook already ACKed
         log.exception("Failed to process %s#%s", repo, number)
 
