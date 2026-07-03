@@ -41,3 +41,15 @@ def context_block(instructions: str) -> str:
         "Follow them where they apply:\n"
         f'"""\n{instructions}\n"""\n'
     )
+
+
+def repo_context_block(repo_context: str) -> str:
+    """Render RAG-retrieved repository excerpts as a prompt preamble.
+
+    Sourced from the pgvector store (see rag/retrieval.py). Returns "" when RAG
+    is disabled or found nothing, so prompts are unchanged in the diff-only case.
+    """
+    repo_context = (repo_context or "").strip()
+    if not repo_context:
+        return ""
+    return f"{repo_context}\n\n"

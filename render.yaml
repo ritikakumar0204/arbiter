@@ -22,3 +22,18 @@ services:
       # Non-secret config can live here.
       - key: GEMINI_MODEL
         value: gemini-2.5-flash-lite
+      # RAG: connection string is injected from the managed Postgres below.
+      # Render's Postgres supports the pgvector extension (CREATE EXTENSION vector).
+      - key: DATABASE_URL
+        fromDatabase:
+          name: arbiter-db
+          property: connectionString
+      - key: EMBEDDING_MODEL
+        value: models/text-embedding-004
+      - key: EMBEDDING_DIM
+        value: "768"
+
+databases:
+  - name: arbiter-db
+    plan: free
+    postgresMajorVersion: "16"

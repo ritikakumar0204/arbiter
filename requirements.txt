@@ -7,6 +7,12 @@ python-dotenv
 PyGithub>=2.3.0
 PyYAML
 
-# --- Agent brain (used by graph/, stubbed for now) ---
+# --- Agent brain ---
 langgraph
 langchain-google-genai
+
+# --- RAG: pgvector store + embeddings ---
+# psycopg 3 (binary build avoids a local libpq) + connection pool + pgvector adapter.
+psycopg[binary]>=3.1
+psycopg-pool>=3.2
+pgvector>=0.3

@@ -1,0 +1,25 @@
+# Local pgvector for the RAG layer. Start it, then set DATABASE_URL in .env:
+#   docker compose up -d
+#   DATABASE_URL=postgresql://arbiter:arbiter@localhost:5432/arbiter
+#
+# Uses the official pgvector image (Postgres 16 + the vector extension baked in),
+# so `CREATE EXTENSION vector` in rag/db.py just works.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: arbiter
+      POSTGRES_PASSWORD: arbiter
+      POSTGRES_DB: arbiter
+    ports:
+      - "5432:5432"
+    volumes:
+      - arbiter_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arbiter -d arbiter"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  arbiter_pgdata:
