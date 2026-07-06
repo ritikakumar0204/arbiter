@@ -37,7 +37,7 @@ _VERDICT_RULES = (
 )
 _DEFAULT_VERDICT = ("reviewed", "#8a8f98")
 
-_ISSUE_FIELDS = "id identifier url team { id } labels { nodes { id } }"
+_ISSUE_FIELDS = "id identifier url team { id } labels { nodes { id name } }"
 
 
 def _api_key() -> str | None:
@@ -152,12 +152,17 @@ def _apply_verdict_label(issue: dict, verdict: str) -> None:
     label_id = _label_id(team_id, f"arbiter:{slug}", color)
     if not label_id:
         return
-    existing = [n["id"] for n in issue.get("labels", {}).get("nodes", [])]
-    if label_id in existing:
+    nodes = issue.get("labels", {}).get("nodes", [])
+    current_ids = [n["id"] for n in nodes]
+    # Keep non-Arbiter labels; drop any prior arbiter:* verdict label so the issue
+    # reflects only the latest verdict (e.g. changes-requested → approved on re-review).
+    kept = [n["id"] for n in nodes if not str(n.get("name", "")).startswith("arbiter:")]
+    new_ids = kept + [label_id]
+    if set(new_ids) == set(current_ids):
         return
     _gql(
         "mutation($id:String!,$ids:[String!]){ issueUpdate(id:$id, input:{labelIds:$ids}){ success } }",
-        {"id": issue["id"], "ids": existing + [label_id]},
+        {"id": issue["id"], "ids": new_ids},
     )
 
 
