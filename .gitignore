@@ -14,3 +14,9 @@ env/
 .DS_Store
 .idea/
 .vscode/
+
+# Submission writeup (kept local, not part of the public repo)
+SUBMISSION.md
+
+# Demo fixtures for arbiter-testing (kept local, not part of the app repo)
+demo/

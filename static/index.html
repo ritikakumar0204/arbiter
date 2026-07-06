@@ -3,133 +3,276 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Arbiter — AI Code Reviewer</title>
-  <meta name="description" content="Arbiter is a GitHub App that reviews every pull request with a team of specialized AI agents." />
-  <!-- Robot emoji as the tab icon -->
+  <title>Arbiter — Multi-Agent AI Code Reviewer</title>
+  <meta name="description" content="Arbiter is a GitHub App that reviews every pull request with a team of specialized AI agents — repo-aware via RAG, exposed over MCP, and synced to Linear." />
+  <meta property="og:title" content="Arbiter — Multi-Agent AI Code Reviewer" />
+  <meta property="og:description" content="Specialist AI agents review every PR in parallel, grounded in your codebase, and post one clear verdict." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #0a0f1f;
-      --bg2: #0d1830;
-      --card: #111d38;
-      --border: #1e3258;
-      --text: #e8eefc;
+      --bg: #060a17;
+      --bg2: #0b1430;
+      --card: #0f1c3a;
+      --card2: #12213f;
+      --border: #203458;
+      --text: #eaf0ff;
       --muted: #93a4c8;
-      --accent: #4f8cff;
-      --accent2: #7aa7ff;
+      --muted2: #6f82a8;
+      --accent: #3b74ff;
+      --accent2: #6f9bff;
+      --accent-soft: rgba(59, 116, 255, 0.14);
+      --good: #4cc38a;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: radial-gradient(1200px 600px at 50% -10%, var(--bg2), var(--bg));
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background:
+        radial-gradient(900px 500px at 15% -10%, rgba(59,116,255,0.18), transparent 60%),
+        radial-gradient(1000px 600px at 100% 0%, rgba(111,155,255,0.10), transparent 55%),
+        var(--bg);
       color: var(--text);
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      line-height: 1.6;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      padding: 40px 24px 64px;
     }
-    .wrap { width: 100%; max-width: 680px; text-align: center; }
-    .logo { font-size: 72px; line-height: 1; filter: drop-shadow(0 8px 24px rgba(79,140,255,0.35)); }
-    h1 {
-      font-size: 44px;
+    .wrap { width: 100%; max-width: 960px; margin: 0 auto; }
+
+    /* --- Hero --- */
+    .hero { text-align: center; padding: 24px 0 8px; }
+    .logo-plate {
+      display: inline-block;
+      background: #ffffff;
+      padding: 22px 34px;
+      border-radius: 22px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06),
+                  0 0 60px rgba(59,116,255,0.25);
+    }
+    .logo-plate img { display: block; height: 74px; width: auto; }
+    h1.visually-hidden {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
+    }
+    .tagline {
+      font-size: clamp(22px, 3.4vw, 32px);
+      font-weight: 700;
       letter-spacing: -0.02em;
-      margin: 12px 0 6px;
+      margin: 28px auto 12px;
+      max-width: 720px;
       background: linear-gradient(90deg, var(--text), var(--accent2));
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
     }
-    .tagline { color: var(--muted); font-size: 18px; margin-bottom: 32px; }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 28px;
-      text-align: left;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    .subtag { color: var(--muted); font-size: 17px; max-width: 620px; margin: 0 auto 28px; }
+
+    .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 8px; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 9px;
+      text-decoration: none; font-weight: 600; font-size: 15px;
+      padding: 13px 24px; border-radius: 12px;
+      transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
     }
-    .card p { color: var(--muted); margin-bottom: 20px; }
-    .card p strong { color: var(--text); font-weight: 600; }
+    .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 10px 30px rgba(59,116,255,0.35); }
+    .btn-primary:hover { background: var(--accent2); transform: translateY(-2px); }
+    .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--accent2); transform: translateY(-2px); }
+
+    /* --- Section scaffolding --- */
+    section { margin-top: 56px; }
+    .eyebrow {
+      text-align: center; text-transform: uppercase; letter-spacing: 0.16em;
+      font-size: 12px; font-weight: 700; color: var(--accent2); margin-bottom: 10px;
+    }
+    h2 { text-align: center; font-size: 26px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 8px; }
+    .section-sub { text-align: center; color: var(--muted); max-width: 620px; margin: 0 auto 30px; }
+
+    /* --- Flow --- */
     .flow {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin: 24px 0 8px;
-    }
-    .pill {
-      background: rgba(79,140,255,0.12);
+      background: linear-gradient(180deg, var(--card), var(--card2));
       border: 1px solid var(--border);
-      color: var(--accent2);
-      padding: 7px 14px;
-      border-radius: 999px;
-      font-size: 13px;
-      white-space: nowrap;
+      border-radius: 18px;
+      padding: 30px 24px;
+      display: flex; align-items: center; justify-content: center;
+      gap: 14px; flex-wrap: wrap;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.30);
     }
-    .arrow { color: var(--muted); font-size: 18px; }
-    .agents { display: flex; flex-direction: column; gap: 6px; }
-    .cta {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      margin-top: 28px;
-      background: var(--accent);
-      color: #fff;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 16px;
-      padding: 14px 26px;
-      border-radius: 12px;
-      transition: transform 0.12s ease, background 0.12s ease;
+    .node {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 16px; font-size: 14px; font-weight: 500;
+      display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 104px; text-align: center;
     }
-    .cta:hover { background: var(--accent2); transform: translateY(-2px); }
-    .stack { margin-top: 28px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-    .tech { font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; }
-    footer { margin-top: 28px; color: var(--muted); font-size: 13px; }
+    .node small { color: var(--muted2); font-size: 11px; font-weight: 400; }
+    .agents-stack { display: flex; flex-direction: column; gap: 8px; }
+    .agent-pill {
+      background: var(--accent-soft); border: 1px solid var(--border);
+      color: var(--accent2); padding: 8px 15px; border-radius: 999px;
+      font-size: 13px; font-weight: 500; white-space: nowrap;
+    }
+    .arrow { color: var(--muted2); font-size: 20px; }
+    .verdict { border-color: rgba(76,195,138,0.4); color: var(--good); background: rgba(76,195,138,0.10); }
+
+    /* --- Feature grid --- */
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .feature {
+      background: linear-gradient(180deg, var(--card), var(--card2));
+      border: 1px solid var(--border); border-radius: 16px; padding: 24px;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .feature:hover { transform: translateY(-3px); border-color: var(--accent2); }
+    .feature .icon {
+      width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center;
+      background: var(--accent-soft); font-size: 21px; margin-bottom: 14px;
+    }
+    .feature h3 { font-size: 17px; font-weight: 700; margin-bottom: 7px; }
+    .feature p { color: var(--muted); font-size: 14.5px; }
+    .feature .tag { display: inline-block; margin-top: 12px; font-size: 11px; color: var(--muted2); border: 1px solid var(--border); border-radius: 7px; padding: 3px 9px; }
+
+    /* --- Verdict sample --- */
+    .sample {
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.30);
+    }
+    .sample-head { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 12px 18px; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+    .dot { width: 11px; height: 11px; border-radius: 50%; }
+    .sample-body { padding: 20px 22px; font-size: 14.5px; }
+    .badge-rc { display: inline-block; background: rgba(229,72,77,0.15); color: #ff8a8e; border: 1px solid rgba(229,72,77,0.35); border-radius: 7px; padding: 3px 10px; font-weight: 600; font-size: 13px; margin-bottom: 12px; }
+    .sample-body ul { margin: 8px 0 0 18px; color: var(--muted); }
+    .sample-body li { margin-bottom: 6px; }
+    .sample-body code { background: var(--bg2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; font-size: 13px; color: var(--accent2); }
+
+    /* --- Tech stack --- */
+    .stack { display: flex; gap: 9px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
+    .tech { font-size: 13px; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 9px; padding: 8px 14px; font-weight: 500; }
+
+    footer { margin-top: 60px; text-align: center; color: var(--muted2); font-size: 14px; }
     footer a { color: var(--accent2); text-decoration: none; }
     footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+      .flow { gap: 10px; }
+      .arrow { transform: rotate(90deg); }
+    }
   </style>
 </head>
 <body>
   <main class="wrap">
-    <div class="logo">🤖</div>
-    <h1>Arbiter</h1>
-    <p class="tagline">Automated, multi-agent code review for every pull request.</p>
-
-    <section class="card">
-      <p>
-        Arbiter is a <strong>GitHub App</strong> that reviews each pull request the moment
-        it opens. Instead of one generalist model, it runs <strong>three specialist AI
-        agents in parallel</strong> — code quality, test coverage, and documentation — then a
-        <strong>supervisor</strong> synthesizes their notes into a single verdict posted
-        right on the PR.
+    <!-- Hero -->
+    <header class="hero">
+      <h1 class="visually-hidden">Arbiter — Multi-Agent AI Code Reviewer</h1>
+      <div class="logo-plate">
+        <img src="../logo.png" alt="Arbiter logo" width="360" height="74" />
+      </div>
+      <p class="tagline">A team of AI agents reviews every pull request — grounded in your codebase.</p>
+      <p class="subtag">
+        Arbiter is a GitHub App that reviews each PR the moment it opens: three specialist
+        agents run in parallel, a supervisor synthesizes one verdict, and it posts straight
+        to the PR — with context retrieved from the rest of your repository.
       </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/apps/arbiter-prrev" target="_blank" rel="noopener">⚙️ Install on your repo</a>
+        <a class="btn btn-ghost" href="https://github.com/ritikakumar0204/arbiter" target="_blank" rel="noopener">★ View source</a>
+      </div>
+    </header>
 
+    <!-- How it works -->
+    <section>
+      <p class="eyebrow">How it works</p>
+      <h2>Fan-out review, one clear verdict</h2>
+      <p class="section-sub">Each PR fans out to three specialists that run concurrently; the supervisor waits for all of them, then writes the decision.</p>
       <div class="flow">
-        <div class="agents">
-          <span class="pill">code quality</span>
-          <span class="pill">test coverage</span>
-          <span class="pill">documentation</span>
+        <div class="node">PR opened<small>signed webhook</small></div>
+        <span class="arrow">→</span>
+        <div class="node">Retrieve context<small>pgvector · RAG</small></div>
+        <span class="arrow">→</span>
+        <div class="agents-stack">
+          <span class="agent-pill">code quality</span>
+          <span class="agent-pill">test coverage</span>
+          <span class="agent-pill">documentation</span>
         </div>
         <span class="arrow">→</span>
-        <span class="pill">supervisor</span>
+        <div class="node">supervisor<small>synthesize</small></div>
         <span class="arrow">→</span>
-        <span class="pill">✅ PR comment</span>
+        <div class="node verdict">✅ verdict<small>on the PR</small></div>
       </div>
+    </section>
 
-      <div style="text-align:center;">
-        <a class="cta" href="https://github.com/apps/arbiter-prrev" target="_blank" rel="noopener">
-          ⚙️ Install on your repo
-        </a>
+    <!-- Features -->
+    <section>
+      <p class="eyebrow">Capabilities</p>
+      <h2>More than a single model call</h2>
+      <p class="section-sub">Purpose-built agents, real codebase grounding, and integrations that meet your team where it works.</p>
+      <div class="grid">
+        <article class="feature">
+          <div class="icon">🧠</div>
+          <h3>Multi-agent orchestration</h3>
+          <p>Three specialist reviewers — code quality, test coverage, documentation — run in true parallel via LangGraph, then a supervisor merges their notes into one verdict.</p>
+          <span class="tag">LangGraph · fan-out / fan-in</span>
+        </article>
+        <article class="feature">
+          <div class="icon">🔍</div>
+          <h3>Repo-aware reviews (RAG)</h3>
+          <p>The repository is embedded into pgvector; each diff retrieves the most relevant code so agents judge changes against your actual codebase — not the diff in isolation. Incremental indexing re-embeds only what changed.</p>
+          <span class="tag">pgvector · Gemini embeddings</span>
+        </article>
+        <article class="feature">
+          <div class="icon">🔌</div>
+          <h3>MCP server</h3>
+          <p>The same reviewers are exposed as Model Context Protocol tools, so Claude Desktop, Cursor, or any MCP client can review a local diff — no webhook or GitHub App required.</p>
+          <span class="tag">Model Context Protocol</span>
+        </article>
+        <article class="feature">
+          <div class="icon">📋</div>
+          <h3>Linear sync</h3>
+          <p>When a PR maps to a Linear issue, the verdict is mirrored there as a comment and an <code>arbiter:</code> label — closing the loop back to where the work is tracked.</p>
+          <span class="tag">Linear GraphQL API</span>
+        </article>
       </div>
+    </section>
 
+    <!-- Sample verdict -->
+    <section>
+      <p class="eyebrow">What you get</p>
+      <h2>A verdict, not a wall of text</h2>
+      <p class="section-sub">Every review opens with a clear decision, then the specifics — posted right on the pull request.</p>
+      <div class="sample">
+        <div class="sample-head">
+          <span class="dot" style="background:#ff5f56"></span>
+          <span class="dot" style="background:#ffbd2e"></span>
+          <span class="dot" style="background:#27c93f"></span>
+          <span style="margin-left:6px">🤖 Arbiter — PR Review · <span style="color:var(--accent2)">🔍 repo-aware</span></span>
+        </div>
+        <div class="sample-body">
+          <span class="badge-rc">Request Changes</span>
+          <div><strong>Code Quality</strong></div>
+          <ul>
+            <li><code>=</code> used instead of <code>==</code> in <code>apply_coupon</code> — assigns instead of comparing.</li>
+          </ul>
+          <div style="margin-top:10px"><strong>Test Coverage</strong></div>
+          <ul>
+            <li>No tests for the 0% and 100% discount edge cases.</li>
+          </ul>
+          <div style="margin-top:10px"><strong>Documentation</strong></div>
+          <ul>
+            <li><code>total()</code> and <code>apply_coupon()</code> are missing docstrings.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tech stack -->
+    <section>
+      <p class="eyebrow">Built with</p>
+      <h2>Stack</h2>
       <div class="stack">
         <span class="tech">LangGraph</span>
-        <span class="tech">FastAPI</span>
         <span class="tech">Google Gemini</span>
+        <span class="tech">FastAPI</span>
+        <span class="tech">pgvector</span>
+        <span class="tech">MCP</span>
+        <span class="tech">Linear API</span>
         <span class="tech">GitHub App</span>
         <span class="tech">Docker</span>
       </div>

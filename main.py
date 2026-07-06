@@ -142,6 +142,13 @@ def home() -> FileResponse:
     return FileResponse(INDEX_HTML)
 
 
+@app.get("/logo.png")
+def logo() -> FileResponse:
+    """Serve the repo-root logo so the landing page's relative <img> resolves both
+    when served (/) and when the HTML file is opened directly (file://)."""
+    return FileResponse(Path(__file__).parent / "logo.png")
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
